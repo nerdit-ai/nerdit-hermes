@@ -13,6 +13,10 @@ def register(ctx):
     ):
         ctx.register_tool(name=schema["name"], toolset="nerdit", schema=schema, handler=handler, emoji="🚀")
 
+    section = getattr(ctx, "register_system_prompt_section", None)
+    if section:
+        section("nerdit.usage", tools.PROMPT)
+
     ctx.register_hook("pre_llm_call", tools.watch)
     ctx.register_hook("pre_tool_call", tools.guard)
     ctx.register_command(

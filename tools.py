@@ -10,6 +10,18 @@ from . import daemon
 
 UNHEALTHY = {"failed", "degraded", "restarting"}
 
+# Frozen into each new session's system prompt, so the agent reaches for the
+# tools instead of driving the nerdit CLI or Docker from the terminal.
+PROMPT = (
+    "Nerdit runs on this machine: it builds an app folder, runs it as a supervised service that "
+    "survives the session, and gives it a URL. To put online, host, deploy or keep running "
+    "anything you build (web app, API, bot, scheduled job), call the nerdit_ship tool with the "
+    "folder path. Do not run `nerdit`, `docker` or a long-lived server from the terminal for "
+    "that, and do not read Nerdit's own files under ~/.nerdit. nerdit_apps lists what runs, "
+    "nerdit_diagnose explains a failing app, nerdit_call reaches the engine's other tools. The "
+    "skills nerdit:ship and nerdit:rescue hold the full workflows."
+)
+
 # Engine tools that delete data, expose an app or run arbitrary commands: a
 # person approves each of these, whatever the session's approval mode.
 ASK_FIRST = {
@@ -120,11 +132,14 @@ def _cwd() -> Path:
 
 def _summary(service: dict) -> dict:
     deploy = service.get("last_deploy") or {}
+    endpoint = service.get("endpoint")
+    if not isinstance(endpoint, dict):  # a plain URL, or nothing while the app is not running
+        endpoint = {"url": endpoint}
     out = {
         "name": service.get("name"),
         "kind": service.get("kind"),
         "status": service.get("status"),
-        "url": service.get("public_url") or service.get("endpoint") or service.get("url"),
+        "url": service.get("public_url") or endpoint.get("public_url") or endpoint.get("url"),
     }
     error = service.get("error_message") or deploy.get("error_message")
     if error:

@@ -1,6 +1,6 @@
 manifest_version: 2
 name: nerdit
-version: 0.1.0
+version: 0.1.1
 description: Hermes puts what it builds online on its own machine and keeps it alive. Deploys a folder to the local Nerdit engine, watches the apps it runs, and tells the agent when one is down.
 author: Nerdit
 license: Apache-2.0

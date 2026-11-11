@@ -11,9 +11,9 @@ turn, without being asked.
 ```
 You (Telegram):  build me a page that shows my server's uptime, and put it online
 Hermes:          ...writes the app, calls nerdit_ship...
-                 It's live: http://uptime.localhost
+                 It's live: https://nerdit.local/uptime/
 You:             /apps
-Hermes:          🟢 uptime  running  http://uptime.localhost
+Hermes:          🟢 uptime  running  https://nerdit.local/uptime/
                  🔴 feed-bot  failed
 ```
 
@@ -25,6 +25,7 @@ Hermes:          🟢 uptime  running  http://uptime.localhost
 | **`nerdit_apps`, `nerdit_diagnose`, `nerdit_logs`** | What runs here, why an app is failing, and its logs. |
 | **`nerdit_call`** | Every other tool of the engine by name: databases, local models, schedules, webhooks, sharing, and the engine's own guides (`get_guide`). |
 | **Outage awareness** (`pre_llm_call` hook) | At the start of a session Hermes is told what runs on the machine. Later it is told once when an app becomes failed, degraded or restarting. No polling by the model, no tokens spent while everything is healthy. |
+| **Standing instruction** (system prompt section) | Six lines that tell Hermes to ship through `nerdit_ship` and not to drive Docker or the `nerdit` CLI from the terminal. |
 | **Approval guard** (`pre_tool_call` hook) | Deleting an app or its data, making an app public, binding a domain and running a command in a container always ask a person first, whatever the session's approval mode. |
 | **`/apps`** | The status of your apps in the CLI, Telegram or Discord, answered by the plugin itself with no model call. `/apps <name>` shows why that app is failing. |
 | **"Keep my apps alive"** blueprint | `/blueprint nerdit:watch` schedules a check every 5, 15 or 30 minutes. When an app is down, Hermes diagnoses it, restarts it if that is the fix, and reports. It stays silent while everything runs. |
@@ -40,7 +41,8 @@ hermes plugins install nerdit        # or, before it is listed: hermes plugins i
 hermes plugins enable nerdit
 ```
 
-Start a new session and ask: *"build a hello-world web app and put it online"*.
+Run `nerdit trust` once so that the `https://nerdit.local/...` URLs open without a certificate
+warning. Start a new session and ask: *"build a hello-world web app and put it online"*.
 
 If Hermes runs as a service with a minimal `PATH`, set `NERDIT_BIN` to the full path of the
 `nerdit` executable. Without the engine the plugin stays quiet: its tools answer with a clear

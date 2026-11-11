@@ -16,7 +16,8 @@ ROOT = Path(__file__).resolve().parent.parent
 FAKE = r'''#!/usr/bin/env python3
 import json, sys
 SERVICES = {"items": [
-    {"name": "blog", "kind": "service", "status": "running", "endpoint": "http://blog.localhost"},
+    {"name": "blog", "kind": "service", "status": "running", "endpoint": {
+        "url": "http://127.0.0.1:9400", "public_url": "http://blog.localhost", "host_port": 9400}},
     {"name": "bot", "kind": "service", "status": "failed", "error_message": "exit code 1"},
 ]}
 REPLIES = {
