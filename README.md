@@ -23,6 +23,7 @@ Hermes:          🟢 uptime  running  https://nerdit.local/uptime/
 |---|---|
 | **`nerdit_ship`** | One tool call that deploys a folder, waits until it is healthy and returns the URL. On failure it returns the engine's diagnosis, so Hermes fixes the cause and ships again. |
 | **`nerdit_apps`, `nerdit_diagnose`, `nerdit_logs`** | What runs here, why an app is failing, and its logs. |
+| **`nerdit_share`** | A hosted https URL for an app, through the machine's link to your Nerdit account. Private by default (you and the people you allow in the Nerdit App), public only after you confirm, and `off` to stop. |
 | **`nerdit_call`** | Every other tool of the engine by name: databases, local models, schedules, webhooks, sharing, and the engine's own guides (`get_guide`). |
 | **Outage awareness** (`pre_llm_call` hook) | At the start of a session Hermes is told what runs on the machine. Later it is told once when an app becomes failed, degraded or restarting. No polling by the model, no tokens spent while everything is healthy. |
 | **Standing instruction** (system prompt section) | Six lines that tell Hermes to ship through `nerdit_ship` and not to drive Docker or the `nerdit` CLI from the terminal. |

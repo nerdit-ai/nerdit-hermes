@@ -9,7 +9,7 @@ def register(ctx):
     """Registers the tools, the two hooks, ``/apps``, the watch blueprint and the skills."""
     for schema, handler in (
         (tools.SHIP, tools.ship), (tools.APPS, tools.apps), (tools.DIAGNOSE, tools.diagnose),
-        (tools.LOGS, tools.logs), (tools.CALL, tools.call),
+        (tools.LOGS, tools.logs), (tools.SHARE, tools.share), (tools.CALL, tools.call),
     ):
         ctx.register_tool(name=schema["name"], toolset="nerdit", schema=schema, handler=handler, emoji="🚀")
 

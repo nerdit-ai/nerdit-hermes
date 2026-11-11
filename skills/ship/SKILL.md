@@ -20,6 +20,7 @@ gives it a URL. Do not start a long-running program in the terminal: it dies wit
 5. **If it failed,** the result carries the diagnosis. Fix the cause in the code or the
    `nerdit.toml` and call `nerdit_ship` again with the same name. At most three attempts, then
    show the user the error and the log tail.
-6. **Answer** with the URL and one line on what runs. To give other people access, see the
-   engine's sharing guide and use `nerdit_call` with `share_service` (a private link for named
-   people needs a linked Nerdit account; say so when the engine refuses).
+6. **Answer** with the URL and one line on what runs. To give other people access, call
+   `nerdit_share`: private by default (the user then allows each person in the Nerdit App),
+   public only when they ask for it. It needs a linked Nerdit account; say so when the engine
+   refuses.

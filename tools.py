@@ -19,7 +19,8 @@ PROMPT = (
     "anything you build (web app, API, bot, scheduled job), call the nerdit_ship tool with the "
     "folder path. Do not run `nerdit`, `docker` or a long-lived server from the terminal for "
     "that, and do not read Nerdit's own files under ~/.nerdit. nerdit_apps lists what runs, "
-    "nerdit_diagnose explains a failing app, nerdit_call reaches the engine's other tools. The "
+    "nerdit_diagnose explains a failing app, nerdit_share gives an app a hosted URL to share "
+    "(private to the people the user allows, or public), nerdit_call reaches the engine's other tools. The "
     "skills nerdit:ship and nerdit:rescue hold the full workflows."
 )
 
@@ -88,11 +89,30 @@ LOGS = {
     },
 }
 
+SHARE = {
+    "name": "nerdit_share",
+    "description": (
+        "Give a Nerdit app a hosted https URL that works outside this machine, through the "
+        "machine's link to the user's Nerdit account. access='private' (default): the URL opens "
+        "only for the account owner and the people they allow in the Nerdit App, so use it to "
+        "share with a colleague or a client. access='public': anyone with the link, the user is "
+        "asked to confirm first. access='off': stop sharing. Needs a linked machine (`nerdit link`)."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "name": {"type": "string", "description": "App name."},
+            "access": {"type": "string", "enum": ["private", "public", "off"], "description": "Default private."},
+        },
+        "required": ["name"],
+    },
+}
+
 CALL = {
     "name": "nerdit_call",
     "description": (
         "Call any other tool of the local Nerdit engine by name: restart_service, stop_service, "
-        "share_service (a private URL for named people), create_database, serve_model, "
+        "create_database, serve_model, "
         "add_schedule, add_hook, set_variable, get_guide and the rest. Call it with "
         "tool='list_guides' or tool='get_guide' and arguments {'topic': 'index'} to read the "
         "engine's own guides before writing a nerdit.toml. Never pass a secret value: ask the "
@@ -205,7 +225,25 @@ def apps(args: dict, **kwargs) -> str:
 
 def diagnose(args: dict, **kwargs) -> str:
     """Handler of ``nerdit_diagnose``."""
-    return _run("diagnose_service", {"name": args.get("name", "")}, timeout=30.0)
+    try:
+        bundle = daemon.call("diagnose_service", {"name": args.get("name", "")}, timeout=30.0)
+    except daemon.NerditError as exc:
+        return _json({"error": {"code": exc.code, "message": str(exc)}})
+    # The bundle names the app's own failure "error"; Hermes reads a top-level
+    # "error" as "the tool call failed", so a successful diagnosis renames it.
+    if isinstance(bundle, dict) and "error" in bundle and len(bundle) > 1:
+        bundle["app_error"] = bundle.pop("error")
+    return _json(bundle)
+
+
+def share(args: dict, **kwargs) -> str:
+    """Handler of ``nerdit_share``: a hosted URL, private by default, or none."""
+    name, access = args.get("name", ""), args.get("access") or "private"
+    _snapshot["at"] = None
+    if access == "off":
+        return _run("unshare_service", {"name": name}, timeout=30.0)
+    # consent is the engine's word for "a person agreed": guard() asked them.
+    return _run("share_service", {"name": name, "access": access, "consent": access == "public"}, timeout=60.0)
 
 
 def logs(args: dict, **kwargs) -> str:
@@ -230,9 +268,15 @@ def guard(tool_name: str = "", args: dict | None = None, **kwargs):
     Returns:
         An ``approve`` directive for a risky ``nerdit_call``, else None.
     """
+    args = args or {}
+    if tool_name == "nerdit_share":
+        access = args.get("access") or "private"
+        if access == "private":
+            return None
+        what = "make public on the internet" if access == "public" else "stop sharing"
+        return {"action": "approve", "message": f"Nerdit: {what} {args.get('name', '')}".strip()}
     if tool_name != "nerdit_call":
         return None
-    args = args or {}
     tool = str(args.get("tool") or "")
     arguments = args.get("arguments") if isinstance(args.get("arguments"), dict) else {}
     public = tool == "share_service" and arguments.get("access") == "public"

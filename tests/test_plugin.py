@@ -24,7 +24,9 @@ REPLIES = {
     "list_services": SERVICES,
     "deploy": {"name": "blog", "last_deploy": {"version": 2}},
     "wait_for_service": {"outcome": "converged", "status": "running", "public_url": "http://blog.localhost"},
-    "diagnose_service": {"status": "failed", "remediation": {"code": "restart", "detail": "transient"},
+    "share_service": {"access": "private", "url": "https://blog--me.nodes.nerdit.ai/", "state": "ready"},
+    "unshare_service": {"shared": False},
+    "diagnose_service": {"status": "failed", "error": {"class": "crash"}, "remediation": {"code": "restart", "detail": "transient"},
                          "logs": [{"line": "boom"}]},
 }
 for line in sys.stdin:
@@ -94,6 +96,13 @@ def main():
         assert approve("share_service", name="bot", access="private") is None
         assert approve("restart_service", name="bot") is None
         assert tools.guard(tool_name="terminal", args={"command": "ls"}) is None
+
+        assert json.loads(tools.share({"name": "blog"}))["url"].startswith("https://")
+        assert tools.guard(tool_name="nerdit_share", args={"name": "blog"}) is None  # private: no prompt
+        for access in ("public", "off"):
+            assert tools.guard(tool_name="nerdit_share", args={"name": "blog", "access": access})["action"] == "approve"
+        found = json.loads(tools.diagnose({"name": "bot"}))
+        assert "error" not in found and found["app_error"] == {"class": "crash"}, found
 
         listing = tools.apps_command("")
         assert "blog  running  http://blog.localhost" in listing and "🔴 bot  failed" in listing, listing
