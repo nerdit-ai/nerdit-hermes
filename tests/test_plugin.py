@@ -85,7 +85,8 @@ def main():
         ask = "Build a tiny hello-world web page app in ./hello and put it online."
         assert "nerdit_ship" in tools.watch(session_id="s3", user_message=ask)["context"]
         assert tools.watch(session_id="s3", user_message=ask) is None  # hinted once
-        assert tools.watch(session_id="s4", user_message="what time is it?") is None
+        other = tools.watch(session_id="s4", user_message="what time is it?")["context"]
+        assert "nerdit_ship" not in other and "'bot' is failed" in other  # no hint, outage still told
 
         approve = lambda tool, **a: tools.guard(tool_name="nerdit_call", args={"tool": tool, "arguments": a})
         assert approve("remove_service", name="bot")["action"] == "approve"
