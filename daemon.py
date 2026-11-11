@@ -12,6 +12,7 @@ import json
 import os
 import shutil
 import subprocess
+import tempfile
 import threading
 
 PROTOCOL = "2025-06-18"
@@ -59,12 +60,14 @@ def call(tool: str, arguments: dict | None = None, timeout: float = 120.0):
             "The nerdit CLI is not installed on this machine (or not on PATH; set NERDIT_BIN). "
             "Install the engine: https://docs.nerdit.ai/engine/quickstart",
         )
+    errors = tempfile.TemporaryFile()
     try:
         proc = subprocess.Popen(  # noqa: S603 - fixed argv, no shell
             [exe, "mcp"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL, text=True, encoding="utf-8",
+            stderr=errors, text=True, encoding="utf-8", env=_clean_env(),
         )
     except OSError as exc:
+        errors.close()
         raise NerditError("not_installed", f"Cannot start {exe}: {exc}") from exc
     timed_out = threading.Event()
 
@@ -86,11 +89,15 @@ def call(tool: str, arguments: dict | None = None, timeout: float = 120.0):
     except (OSError, ValueError) as exc:
         if timed_out.is_set():
             raise NerditError("timeout", f"{tool} did not answer within {int(timeout)} s") from exc
-        raise NerditError("protocol", f"nerdit mcp ended without an answer: {exc}") from exc
+        proc.wait()
+        errors.seek(0)
+        why = errors.read().decode("utf-8", "replace").strip()[-600:] or str(exc)
+        raise NerditError("protocol", f"`{exe} mcp` ended without an answer: {why}") from exc
     finally:
         timer.cancel()
         proc.kill()
         proc.wait()
+        errors.close()
     if "error" in reply:
         raise NerditError("tool_error", str(reply["error"].get("message", reply["error"])))
     result = reply.get("result", {})
@@ -105,6 +112,17 @@ def call(tool: str, arguments: dict | None = None, timeout: float = 120.0):
         return json.loads(text)
     except ValueError:
         return text
+
+
+def _clean_env() -> dict:
+    """The environment for the engine's process, without the host's Python settings.
+
+    Hermes runs plugins in its own interpreter with ``PYTHONPATH`` and, on macOS,
+    ``__PYVENV_LAUNCHER__`` set. The ``nerdit`` CLI is another Python install, and
+    inheriting those makes it import Hermes's packages and exit at startup.
+    """
+    drop = ("PYTHON", "VIRTUAL_ENV", "__PYVENV_LAUNCHER__", "CONDA_", "UV_")
+    return {k: v for k, v in os.environ.items() if not k.startswith(drop)}
 
 
 def _send(proc, message: dict) -> None:

@@ -82,6 +82,11 @@ def main():
         assert tools.watch(session_id="s1") is None  # told once, not every turn
         assert "'bot' is failed" in tools.watch(session_id="s2")["context"]  # another session still learns
 
+        ask = "Build a tiny hello-world web page app in ./hello and put it online."
+        assert "nerdit_ship" in tools.watch(session_id="s3", user_message=ask)["context"]
+        assert tools.watch(session_id="s3", user_message=ask) is None  # hinted once
+        assert tools.watch(session_id="s4", user_message="what time is it?") is None
+
         approve = lambda tool, **a: tools.guard(tool_name="nerdit_call", args={"tool": tool, "arguments": a})
         assert approve("remove_service", name="bot")["action"] == "approve"
         assert approve("share_service", name="bot", access="public")["action"] == "approve"
@@ -92,6 +97,15 @@ def main():
         listing = tools.apps_command("")
         assert "blog  running  http://blog.localhost" in listing and "🔴 bot  failed" in listing, listing
         assert "restart: transient" in tools.apps_command("bot")
+
+        crash = Path(tmp) / "crash"
+        crash.write_text("#!/bin/sh\necho 'ModuleNotFoundError: boom' >&2\nexit 1\n")
+        crash.chmod(crash.stat().st_mode | stat.S_IEXEC)
+        os.environ["NERDIT_BIN"] = str(crash)
+        os.environ["PYTHONPATH"] = "/hermes"
+        failure = json.loads(tools.apps({}))["error"]
+        assert failure["code"] == "protocol" and "boom" in failure["message"], failure  # the reason is shown
+        assert "PYTHONPATH" not in daemon._clean_env() and "PATH" in daemon._clean_env()
 
         os.environ["NERDIT_BIN"] = ""
         os.environ["PATH"] = tmp + "/empty"

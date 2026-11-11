@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from pathlib import Path
 
@@ -250,10 +251,23 @@ _told: dict[str, set] = {}
 TTL = 60.0
 
 
-def watch(session_id: str = "", is_first_turn: bool = False, **kwargs):
+# A request that sounds like hosting gets a one-line pointer to the tool, next
+# to the user's own words: weaker models overlook the system prompt section.
+HOSTING = re.compile(
+    r"\b(deploy|host|hosted|hosting|ship|publish|go live|online|keep (it )?running|url|"
+    r"en ligne|h[ée]berge\w*|d[ée]ploie\w*|d[ée]ployer|publier)\b", re.I)
+HINT = (
+    "Nerdit runs on this machine. To put this online, call the nerdit_ship tool with the app "
+    "folder (it builds, runs and returns the URL). Do not use GitHub Pages, another host, "
+    "`docker` or the `nerdit` CLI for it."
+)
+
+
+def watch(session_id: str = "", is_first_turn: bool = False, user_message: str = "", **kwargs):
     """``pre_llm_call`` hook: tell the agent when one of its apps is down.
 
-    On a session's first turn it lists what runs on the machine. On later turns
+    A message that asks for hosting gets a pointer to ``nerdit_ship``, once per
+    session. On a session's first turn it lists what runs on the machine. On later turns
     it speaks only when an app became unhealthy, once per app and status, so the
     agent learns of an outage without being asked and is not nagged about it.
 
@@ -269,15 +283,18 @@ def watch(session_id: str = "", is_first_turn: bool = False, **kwargs):
             _snapshot["apps"] = []
         _snapshot["at"] = now
     current = _snapshot["apps"]
-    if not current:
-        return None
     if len(_told) > 500:
         _told.clear()
     told = _told.setdefault(session_id, set())
+    lines = []
+    if "hint" not in told and daemon.binary() and HOSTING.search(str(user_message or "")):
+        told.add("hint")
+        lines.append(HINT)
+    if not current:
+        return {"context": "\n".join(lines)} if lines else None
     down = [a for a in current if a["status"] in UNHEALTHY]
     fresh = [a for a in down if (a["name"], a["status"]) not in told]
     told.update((a["name"], a["status"]) for a in down)
-    lines = []
     if is_first_turn:
         lines.append("Apps running on this machine with Nerdit: " + ", ".join(
             f"{a['name']} ({a['status']})" for a in current) + ".")
