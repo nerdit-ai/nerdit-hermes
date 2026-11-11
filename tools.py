@@ -256,6 +256,8 @@ TTL = 60.0
 HOSTING = re.compile(
     r"\b(deploy|host|hosted|hosting|ship|publish|go live|online|keep (it )?running|url|"
     r"en ligne|h[ée]berge\w*|d[ée]ploie\w*|d[ée]ployer|publier)\b", re.I)
+# The context lands next to the user's words, so it says who is speaking.
+NOTE = "[Note from the Nerdit plugin, not from the user]\n"
 HINT = (
     "Nerdit runs on this machine. To put this online, call the nerdit_ship tool with the app "
     "folder (it builds, runs and returns the URL). Do not use GitHub Pages, another host, "
@@ -291,7 +293,7 @@ def watch(session_id: str = "", is_first_turn: bool = False, user_message: str =
         told.add("hint")
         lines.append(HINT)
     if not current:
-        return {"context": "\n".join(lines)} if lines else None
+        return {"context": NOTE + "\n".join(lines)} if lines else None
     down = [a for a in current if a["status"] in UNHEALTHY]
     fresh = [a for a in down if (a["name"], a["status"]) not in told]
     told.update((a["name"], a["status"]) for a in down)
@@ -302,9 +304,10 @@ def watch(session_id: str = "", is_first_turn: bool = False, user_message: str =
         lines.append(
             f"Nerdit app '{a['name']}' is {a['status']}"
             + (f": {a['error'].rstrip('.')}" if a.get("error") else "")
-            + ". Tell the user, and call nerdit_diagnose before changing anything."
+            + ". Mention it to the user in one line at the end of your answer. Do not act on it "
+            "unless they ask; nerdit_diagnose explains it."
         )
-    return {"context": "\n".join(lines)} if lines else None
+    return {"context": NOTE + "\n".join(lines)} if lines else None
 
 
 def apps_command(raw_args: str = "", **kwargs) -> str:
