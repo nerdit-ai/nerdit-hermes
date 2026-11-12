@@ -64,7 +64,7 @@ def call(tool: str, arguments: dict | None = None, timeout: float = 120.0):
     try:
         proc = subprocess.Popen(  # noqa: S603 - fixed argv, no shell
             [exe, "mcp"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=errors, text=True, encoding="utf-8", env=_clean_env(),
+            stderr=errors, text=True, encoding="utf-8", env=_engine_env(),
         )
     except OSError as exc:
         errors.close()
@@ -114,15 +114,28 @@ def call(tool: str, arguments: dict | None = None, timeout: float = 120.0):
         return text
 
 
-def _clean_env() -> dict:
-    """The environment for the engine's process, without the host's Python settings.
+# The only variables the engine's process receives, by exact name and by prefix.
+ENV_NAMES = {"PATH", "HOME", "USER", "LANG", "TMPDIR", "DOCKER_HOST", "DOCKER_CONTEXT"}
+ENV_PREFIXES = ("LC_", "NERDIT_")
 
-    Hermes runs plugins in its own interpreter with ``PYTHONPATH`` and, on macOS,
-    ``__PYVENV_LAUNCHER__`` set. The ``nerdit`` CLI is another Python install, and
-    inheriting those makes it import Hermes's packages and exit at startup.
+
+def _engine_env() -> dict:
+    """The environment for the engine's process: an explicit allowlist.
+
+    Hermes holds the user's provider keys in its environment, and the engine
+    needs none of them, so nothing is inherited by default. The process gets
+    what it needs to find its config and Docker (``PATH``, ``HOME``, ``USER``,
+    ``TMPDIR``, ``DOCKER_HOST``, ``DOCKER_CONTEXT``), the locale (``LANG``,
+    ``LC_*``) and Nerdit's own settings (``NERDIT_*``).
+
+    This also keeps out Hermes's Python settings (``PYTHONPATH`` and, on macOS,
+    ``__PYVENV_LAUNCHER__``), which make the ``nerdit`` CLI, another Python
+    install, import Hermes's packages and exit at startup.
+
+    Returns:
+        The variables of this process that are on the allowlist.
     """
-    drop = ("PYTHON", "VIRTUAL_ENV", "__PYVENV_LAUNCHER__", "CONDA_", "UV_")
-    return {k: v for k, v in os.environ.items() if not k.startswith(drop)}
+    return {k: v for k, v in os.environ.items() if k in ENV_NAMES or k.startswith(ENV_PREFIXES)}
 
 
 def _send(proc, message: dict) -> None:

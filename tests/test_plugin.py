@@ -85,16 +85,27 @@ def main():
         assert "'bot' is failed" in tools.watch(session_id="s2")["context"]  # another session still learns
 
         ask = "Build a tiny hello-world web page app in ./hello and put it online."
-        assert "nerdit_ship" in tools.watch(session_id="s3", user_message=ask)["context"]
+        hint = tools.watch(session_id="s3", user_message=ask)["context"]
+        assert "nerdit_ship" in hint and "Unless the user asked for another host" in hint, hint
+        assert "GitHub Pages" not in hint
         assert tools.watch(session_id="s3", user_message=ask) is None  # hinted once
         other = tools.watch(session_id="s4", user_message="what time is it?")["context"]
         assert "nerdit_ship" not in other and "'bot' is failed" in other  # no hint, outage still told
 
         approve = lambda tool, **a: tools.guard(tool_name="nerdit_call", args={"tool": tool, "arguments": a})
-        assert approve("remove_service", name="bot")["action"] == "approve"
-        assert approve("share_service", name="bot", access="public")["action"] == "approve"
-        assert approve("share_service", name="bot", access="private") is None
-        assert approve("restart_service", name="bot") is None
+        for safe in ("list_services", "get_service", "service_logs", "diagnose_service",
+                     "list_guides", "get_guide", "restart_service", "wait_for_service"):
+            assert approve(safe, name="bot") is None, safe
+        assert tools.SAFE == {"list_services", "get_service", "service_logs", "diagnose_service",
+                              "list_guides", "get_guide", "restart_service", "wait_for_service"}
+        # Everything else asks, including a tool this plugin has never heard of.
+        for risky in ("remove_service", "stop_service", "add_hook", "add_schedule", "set_variable",
+                      "run_command", "share_service", "a_tool_added_later", "Restart_Service",
+                      "restart_service "):
+            assert approve(risky, name="bot") == {"action": "approve", "message": f"Nerdit: {risky} bot".strip()}, risky
+        assert "public" in approve("share_service", name="bot", access="public")["message"]
+        assert tools.guard(tool_name="nerdit_call", args={"tool": "stop_service", "arguments": "bot"})["action"] == "approve"
+        assert tools.guard(tool_name="nerdit_call", args={}) is None  # no tool: the handler refuses it
         assert tools.guard(tool_name="terminal", args={"command": "ls"}) is None
 
         assert json.loads(tools.share({"name": "blog"}))["url"].startswith("https://")
@@ -115,7 +126,30 @@ def main():
         os.environ["PYTHONPATH"] = "/hermes"
         failure = json.loads(tools.apps({}))["error"]
         assert failure["code"] == "protocol" and "boom" in failure["message"], failure  # the reason is shown
-        assert "PYTHONPATH" not in daemon._clean_env() and "PATH" in daemon._clean_env()
+
+        # The engine's process gets an allowlist of variables, never Hermes's own environment.
+        passed = {"PATH": os.environ["PATH"], "HOME": "/home/u", "USER": "u", "LANG": "C.UTF-8",
+                  "LC_ALL": "C.UTF-8", "TMPDIR": tmp, "DOCKER_HOST": "unix:///d.sock",
+                  "DOCKER_CONTEXT": "desktop", "NERDIT_BIN": os.environ["NERDIT_BIN"], "NERDIT_HOME": tmp}
+        kept_out = {"OPENROUTER_API_KEY": "sk-or", "ANTHROPIC_API_KEY": "sk-ant", "OPENAI_API_KEY": "sk",
+                    "AWS_SECRET_ACCESS_KEY": "aws", "GITHUB_TOKEN": "ghp", "HTTPS_PROXY": "http://p",
+                    "VIRTUAL_ENV": "/venv", "__PYVENV_LAUNCHER__": "/py", "DOCKER_CONFIG": "/d",
+                    "LANGUAGE": "en", "HOMEBREW_PREFIX": "/opt", "PATHEXT": ".x", "MY_NERDIT_KEY": "k"}
+        os.environ.update(passed)
+        os.environ.update(kept_out)
+        env = daemon._engine_env()
+        assert passed.items() <= env.items() and not set(kept_out) & set(env), env
+        assert all(k in passed or k.startswith(("LC_", "NERDIT_")) for k in env), env
+        # And that is what the child really receives: this fake prints its environment.
+        dump = Path(tmp) / "dump"
+        dump.write_text("#!/bin/sh\nenv >&2\nexit 1\n")
+        dump.chmod(dump.stat().st_mode | stat.S_IEXEC)
+        os.environ["NERDIT_BIN"] = passed["NERDIT_BIN"] = str(dump)
+        seen = json.loads(tools.apps({}))["error"]["message"]
+        assert "sk-" not in seen and "ghp" not in seen and "/hermes" not in seen, seen
+        assert "DOCKER_CONTEXT=desktop" in seen, seen
+        for key in kept_out:
+            del os.environ[key]
 
         os.environ["NERDIT_BIN"] = ""
         os.environ["PATH"] = tmp + "/empty"

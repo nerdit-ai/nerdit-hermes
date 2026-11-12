@@ -24,10 +24,10 @@ Hermes:          🟢 uptime  running  https://nerdit.local/uptime/
 | **`nerdit_ship`** | One tool call that deploys a folder, waits until it is healthy and returns the URL. On failure it returns the engine's diagnosis, so Hermes fixes the cause and ships again. |
 | **`nerdit_apps`, `nerdit_diagnose`, `nerdit_logs`** | What runs here, why an app is failing, and its logs. |
 | **`nerdit_share`** | A hosted https URL for an app, through the machine's link to your Nerdit account. Private by default (you and the people you allow in the Nerdit App), public only after you confirm, and `off` to stop. |
-| **`nerdit_call`** | Every other tool of the engine by name: databases, local models, schedules, webhooks, sharing, and the engine's own guides (`get_guide`). |
+| **`nerdit_call`** | Every other tool of the engine by name: databases, local models, schedules, webhooks, sharing, and the engine's own guides (`get_guide`). Anything that is not a read or a restart asks you first. |
 | **Outage awareness** (`pre_llm_call` hook) | At the start of a session Hermes is told what runs on the machine. Later it is told once when an app becomes failed, degraded or restarting. No polling by the model, no tokens spent while everything is healthy. |
 | **Standing instruction** (system prompt section) | Six lines that tell Hermes to ship through `nerdit_ship` and not to drive Docker or the `nerdit` CLI from the terminal. |
-| **Approval guard** (`pre_tool_call` hook) | Deleting an app or its data, making an app public, binding a domain and running a command in a container always ask a person first, whatever the session's approval mode. |
+| **Approval guard** (`pre_tool_call` hook) | Through `nerdit_call`, only reading (`list_services`, `get_service`, `service_logs`, `diagnose_service`, `list_guides`, `get_guide`, `wait_for_service`) and `restart_service` run directly. Every other engine tool asks a person first, whatever the session's approval mode, and so does any tool a later engine version adds. `nerdit_share` asks before making an app public or stopping a share. |
 | **`/apps`** | The status of your apps in the CLI, Telegram or Discord, answered by the plugin itself with no model call. `/apps <name>` shows why that app is failing. |
 | **"Keep my apps alive"** blueprint | `/blueprint nerdit:watch` schedules a check every 5, 15 or 30 minutes. When an app is down, Hermes diagnoses it, restarts it if that is the fix, and reports. It stays silent while everything runs. |
 | **Skills** | `nerdit:ship` and `nerdit:rescue`, the two workflows above written out. |
@@ -54,6 +54,10 @@ If Hermes runs as a service with a minimal `PATH`, set `NERDIT_BIN` to the full 
 - **It starts a local process.** Each call runs `nerdit mcp`, the server that ships with the
   engine, and sends it one request over stdio. No shell is involved and the arguments are
   fixed. The outage check runs it at most once a minute, with an 8 second limit.
+- **That process does not inherit Hermes's environment.** It receives only `PATH`, `HOME`,
+  `USER`, `LANG`, `LC_*`, `TMPDIR`, `DOCKER_HOST`, `DOCKER_CONTEXT` and `NERDIT_*`. The
+  provider keys and tokens Hermes holds never reach the engine. If your engine needs another
+  variable, set it where the engine's daemon starts, not in Hermes.
 - **It acts with your `nerdit` CLI's rights.** The plugin never reads, stores or sends a
   credential. The `nerdit` process uses the token your CLI is configured with, which is an
   admin token by default. To narrow what Hermes can do, give the CLI a scoped token, as

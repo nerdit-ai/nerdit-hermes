@@ -17,19 +17,19 @@ PROMPT = (
     "Nerdit runs on this machine: it builds an app folder, runs it as a supervised service that "
     "survives the session, and gives it a URL. To put online, host, deploy or keep running "
     "anything you build (web app, API, bot, scheduled job), call the nerdit_ship tool with the "
-    "folder path. Do not run `nerdit`, `docker` or a long-lived server from the terminal for "
+    "folder path, unless the user asked for another host. Do not run `nerdit`, `docker` or a long-lived server from the terminal for "
     "that, and do not read Nerdit's own files under ~/.nerdit. nerdit_apps lists what runs, "
     "nerdit_diagnose explains a failing app, nerdit_share gives an app a hosted URL to share "
     "(private to the people the user allows, or public), nerdit_call reaches the engine's other tools. The "
     "skills nerdit:ship and nerdit:rescue hold the full workflows."
 )
 
-# Engine tools that delete data, expose an app or run arbitrary commands: a
-# person approves each of these, whatever the session's approval mode.
-ASK_FIRST = {
-    "remove_service", "delete_project", "remove_secret", "remove_domain", "add_domain",
-    "unshare_service", "run_command", "system_gc", "restart_daemon", "set_config",
-    "apply_config", "dump_database",
+# The engine tools nerdit_call runs without asking: they read, or restart an app
+# in place. A person approves every other tool, whatever the session's approval
+# mode, and so also any tool a later engine version adds.
+SAFE = {
+    "list_services", "get_service", "service_logs", "diagnose_service", "list_guides",
+    "get_guide", "restart_service", "wait_for_service",
 }
 
 SHIP = {
@@ -116,8 +116,9 @@ CALL = {
         "add_schedule, add_hook, set_variable, get_guide and the rest. Call it with "
         "tool='list_guides' or tool='get_guide' and arguments {'topic': 'index'} to read the "
         "engine's own guides before writing a nerdit.toml. Never pass a secret value: ask the "
-        "user to run `nerdit secrets set <app> --prompt KEY` themselves. Tools that delete data, "
-        "make an app public or run commands ask the user first."
+        "user to run `nerdit secrets set <app> --prompt KEY` themselves. Reading (list_services, "
+        "get_service, service_logs, diagnose_service, list_guides, get_guide, wait_for_service) "
+        "and restart_service run directly; every other tool asks the user first."
     ),
     "parameters": {
         "type": "object",
@@ -263,10 +264,17 @@ def call(args: dict, **kwargs) -> str:
 
 
 def guard(tool_name: str = "", args: dict | None = None, **kwargs):
-    """``pre_tool_call`` hook: a person approves destructive or exposing calls.
+    """``pre_tool_call`` hook: a person approves what is not known to be safe.
+
+    ``nerdit_share`` asks before making an app public or stopping a share.
+    ``nerdit_call`` asks for every engine tool that is not in ``SAFE``.
+
+    Args:
+        tool_name: The Hermes tool about to run.
+        args: Its arguments.
 
     Returns:
-        An ``approve`` directive for a risky ``nerdit_call``, else None.
+        An ``approve`` directive when a person must agree first, else None.
     """
     args = args or {}
     if tool_name == "nerdit_share":
@@ -279,12 +287,12 @@ def guard(tool_name: str = "", args: dict | None = None, **kwargs):
         return None
     tool = str(args.get("tool") or "")
     arguments = args.get("arguments") if isinstance(args.get("arguments"), dict) else {}
+    if not tool or tool in SAFE:  # no tool name: the handler refuses the call itself
+        return None
     public = tool == "share_service" and arguments.get("access") == "public"
-    if tool in ASK_FIRST or public:
-        what = "make an app public on the internet" if public else tool
-        target = arguments.get("name") or arguments.get("service") or ""
-        return {"action": "approve", "message": f"Nerdit: {what} {target}".strip()}
-    return None
+    what = "make an app public on the internet" if public else tool
+    target = arguments.get("name") or arguments.get("service") or ""
+    return {"action": "approve", "message": f"Nerdit: {what} {target}".strip()}
 
 
 # One reading of the engine shared by every session of this process.
@@ -303,9 +311,9 @@ HOSTING = re.compile(
 # The context lands next to the user's words, so it says who is speaking.
 NOTE = "[Note from the Nerdit plugin, not from the user]\n"
 HINT = (
-    "Nerdit runs on this machine. To put this online, call the nerdit_ship tool with the app "
-    "folder (it builds, runs and returns the URL). Do not use GitHub Pages, another host, "
-    "`docker` or the `nerdit` CLI for it."
+    "Nerdit runs on this machine. Unless the user asked for another host, put this online by "
+    "calling the nerdit_ship tool with the app folder (it builds, runs and returns the URL), "
+    "not by running `docker` or the `nerdit` CLI yourself."
 )
 
 
